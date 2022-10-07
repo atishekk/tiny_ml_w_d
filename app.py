@@ -3,9 +3,17 @@ import streamlit as st
 import numpy as np
 from PIL import Image
 from pathlib import Path
+import random
+import requests
+from io import BytesIO
 
 import tensorflow as tf
 from tensorflow.keras.applications import efficientnet
+
+def preprocess(img):
+    img = efficientnet.preprocess_input(np.array(img.resize((260, 260))))
+    img = np.expand_dims(img, axis=0)
+    return img.astype(np.float32)
 
 
 def predict(image):
@@ -22,6 +30,15 @@ def get_sample_images():
     labels = [" ".join(i.stem.split("-")[:-1]) for i in images]
     imgs = {i:l for i, l in zip(images, labels)}
     return imgs
+
+def load_image(url): 
+    res = requests.get(url)
+    if res.status_code == 200 and 'png' in res.headers['Content-Type']:
+        print("Hello")
+        img_arr = np.array(Image.open(BytesIO(res.content)))
+        return img_arr
+    else: 
+        return None
 
 if __name__ == "__main__":
     st.set_page_config(page_title="Weed Seedings Detection")
@@ -58,14 +75,24 @@ if __name__ == "__main__":
 
 
     if st.button("Use a sample image"):
-        # get the file
-        pass
+        BASE = "https://raw.githubusercontent.com/atishekk/tiny_ml_w_d/main/"
+        img_path = random.choice(list(sample_images.keys()))
+        URI = f"{BASE}{img_path}"
+        file = load_image(URI)
+        if file is None:
+            st.write("Error retrieving image.")
+        else:
+            img = Image.fromarray(file)
+            img = preprocess(img)
+            p = predict(img)
+            st.image(
+                    file, caption=f"Predicted: {p} - Correct: {sample_images[img_path]} - {'Weed' if p in weeds else 'Not a weed'}", width=500)
+
     elif uploader is not None:
         file = uploader.read()
         img = Image.open(uploader)
-        img = efficientnet.preprocess_input(np.array(img.resize((260, 260))))
-        img = np.expand_dims(img, axis=0)
-        p = predict(img.astype(np.float32))
+        img = preprocess(img)
+        p = predict(img)
         st.image(
             file, caption=f"{p} - {'Weed' if p in weeds else 'Not a weed'}", width=500)
 
